@@ -1,0 +1,143 @@
+/*
+  ============================================================
+  Galvo CNC laser engraver
+  ============================================================
+
+float STEPS_PER_MM = 20.0;     // reduced for mirror stability
+float SQUARE_SIZE  = 10.0;     // smaller = better for mirrors
+
+int stepDelay = 800;           // slower = smoother (700–1000 best)
+
+#define X_STEP_PIN 2
+#define X_DIR_PIN  5
+#define Y_STEP_PIN 3
+#define Y_DIR_PIN  6
+#define ENABLE_PIN 8
+#define LASER_PIN  12
+
+int currentX = 0;
+int currentY = 0;
+
+void laserON() {
+  analogWrite(LASER_PIN, 200);   // stable beam
+}
+
+void laserOFF() {
+  analogWrite(LASER_PIN, 0);
+}
+void stepMotor(int stepPin, int dirPin, bool dir) {
+  digitalWrite(dirPin, dir);
+  digitalWrite(stepPin, HIGH);
+  delayMicroseconds(stepDelay);
+  digitalWrite(stepPin, LOW);
+  delayMicroseconds(stepDelay);
+}
+
+void moveX(bool dir, int steps) {
+  for (int i = 0; i < steps; i++) {
+    stepMotor(X_STEP_PIN, X_DIR_PIN, dir);
+  }
+}
+
+void moveY(bool dir, int steps) {
+  for (int i = 0; i < steps; i++) {
+    stepMotor(Y_STEP_PIN, Y_DIR_PIN, dir);
+  }
+}
+void moveX_mm(bool dir, float mm) {
+  int s = round(mm * STEPS_PER_MM);
+  moveX(dir, s);
+}
+
+void moveY_mm(bool dir, float mm) {
+  int s = round(mm * STEPS_PER_MM);
+  moveY(dir, s);
+}
+void moveXY_mm(float x_mm, float y_mm) {
+  int xSteps = round(x_mm * STEPS_PER_MM);
+  int ySteps = round(y_mm * STEPS_PER_MM);
+
+  int steps = max(abs(xSteps), abs(ySteps));
+
+  for (int i = 0; i < steps; i++) {
+    if (i < abs(xSteps)) stepMotor(X_STEP_PIN, X_DIR_PIN, xSteps > 0);
+    if (i < abs(ySteps)) stepMotor(Y_STEP_PIN, Y_DIR_PIN, ySteps > 0);
+  }
+}
+
+void goHome() {
+  moveXY_mm(-currentX / STEPS_PER_MM, -currentY / STEPS_PER_MM);
+  currentX = 0;
+  currentY = 0;
+}
+
+void drawSquare() {
+  Serial.println("Drawing smooth square");
+
+  goHome();
+
+  float s = SQUARE_SIZE;
+
+  laserON();
+  delay(50);
+
+  moveXY_mm( s, 0);   // right
+  moveXY_mm( 0, s);   // up
+  moveXY_mm(-s, 0);   // left
+  moveXY_mm( 0,-s);   // down
+
+  laserOFF();
+}
+
+void drawLine() {
+  Serial.println("Drawing smooth line");
+
+  goHome();
+
+  laserON();
+  delay(50);
+
+  moveXY_mm(10, 10);   // diagonal smooth
+
+  laserOFF();
+}
+
+void setup() {
+  pinMode(X_STEP_PIN, OUTPUT);
+  pinMode(X_DIR_PIN, OUTPUT);
+  pinMode(Y_STEP_PIN, OUTPUT);
+  pinMode(Y_DIR_PIN, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(LASER_PIN, OUTPUT);
+
+  digitalWrite(ENABLE_PIN, LOW);
+
+  Serial.begin(9600);
+
+  Serial.println("=== SMOOTH LASER SYSTEM READY ===");
+  Serial.println("Commands:");
+  Serial.println("S = Square");
+  Serial.println("L = Line");
+  Serial.println("1 = Laser ON");
+  Serial.println("0 = Laser OFF");
+}
+
+void loop() {
+  if (Serial.available()) {
+    char c = Serial.read();
+
+    if (c == '\n' || c == '\r') return;
+
+    switch (c) {
+      case 'S': drawSquare(); break;
+      case 'L': drawLine(); break;
+      case '1': laserON(); break;
+      case '0': laserOFF(); break;
+
+      default:
+        Serial.print("Unknown: ");
+        Serial.println(c);
+        break;
+    }
+  }
+}
